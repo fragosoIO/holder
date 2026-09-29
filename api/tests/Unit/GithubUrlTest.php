@@ -22,6 +22,10 @@ final class GithubUrlTest extends Unit
     {
         $this->assertSame(
             'https://github.com/Acme/Widget',
+            GithubUrl::canonicalize('https://github.com/Acme/Widget/'),
+        );
+        $this->assertSame(
+            'https://github.com/Acme/Widget',
             GithubUrl::canonicalize('https://github.com/Acme/Widget.git/'),
         );
     }
@@ -53,6 +57,8 @@ final class GithubUrlTest extends Unit
             ['https://github.com/. /Widget'],
             ['https://github.com/Acme/..'],
             [''],
+            ['https://github.com/Acme//Widget'],
+            ['https://github.com/Acme/Widget//'],
         ];
     }
 }

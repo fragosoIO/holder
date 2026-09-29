@@ -18,7 +18,13 @@ final class GithubUrl
             isset($parts['user']) || isset($parts['pass']) || isset($parts['port'])
             || isset($parts['query']) || isset($parts['fragment'])
         );
-        $segments = array_values(array_filter(explode('/', trim($path, '/')), static fn (string $segment): bool => $segment !== ''));
+        if (str_ends_with($path, '/')) {
+            $path = substr($path, 0, -1);
+        }
+        $segments = explode('/', $path);
+        if ($segments !== [] && $segments[0] === '') {
+            array_shift($segments);
+        }
         if (
             $hasExtra
             || strtolower($scheme) !== 'https'
