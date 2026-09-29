@@ -7,15 +7,6 @@ namespace App\Domain\Github;
 use App\Domain\HolderConfig;
 use App\Domain\HolderException;
 
-final readonly class GitResult
-{
-    public function __construct(
-        public int $exit,
-        public string $stdout,
-        public string $stderr,
-    ) {}
-}
-
 final class GitClient
 {
     private readonly string $git;
