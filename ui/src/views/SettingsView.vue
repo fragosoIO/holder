@@ -34,7 +34,7 @@ async function save() {
 }
 
 async function saveToken() {
-  if (!company.value) return
+  if (!company.value || githubToken.value.trim() === '') return
   message.value = ''
   error.value = ''
   try {
@@ -78,11 +78,11 @@ async function clearToken() {
     <div class="grid gap-3">
       <p class="text-sm text-muted-foreground">{{ company.githubConnected ? 'GitHub token saved' : 'No GitHub token' }}</p>
       <label class="label">GitHub token
-        <input v-model="githubToken" type="password" autocomplete="off" class="field" @keydown.enter.prevent="saveToken" />
+        <input v-model="githubToken" type="password" autocomplete="off" class="field" @keydown.enter.prevent="githubToken.trim() && saveToken()" />
       </label>
       <div class="flex justify-end gap-2">
         <button v-if="company.githubConnected" class="btn btn-ghost" type="button" @click="clearToken">Clear</button>
-        <button class="btn btn-primary" type="button" @click="saveToken">Save</button>
+        <button class="btn btn-primary" type="button" :disabled="githubToken.trim() === ''" @click="saveToken">Save</button>
       </div>
     </div>
     <p v-if="message" class="text-sm text-muted-foreground" role="status">{{ message }}</p>
