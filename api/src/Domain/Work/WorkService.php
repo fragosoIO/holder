@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Domain\Work;
 
+use App\Domain\Github\GithubUrl;
+use App\Domain\Github\RepoCheckout;
+use App\Domain\Github\TokenCipher;
 use App\Domain\HolderException;
 use App\Domain\Identity\IdentityService;
 use App\Domain\Ids;
@@ -20,6 +23,8 @@ final class WorkService
         private readonly Db $db,
         private readonly IdentityService $identity,
         private readonly OrgService $org,
+        private readonly RepoCheckout $checkout,
+        private readonly TokenCipher $cipher,
     ) {
         $this->agentQuestions = new AgentQuestions();
     }
@@ -92,23 +97,54 @@ final class WorkService
             'companyId' => (string) $row['company_id'],
             'name' => (string) $row['name'],
             'workspacePath' => (string) $row['workspace_path'],
+            'repoUrl' => (string) ($row['repo_url'] ?? ''),
+            'defaultBranch' => (string) ($row['default_branch'] ?? ''),
         ], $rows);
     }
 
     /**
      * @return array<string, mixed>
      */
-    public function createProject(string $userId, string $companyId, string $name, string $workspacePath): array
-    {
+    public function createProject(
+        string $userId,
+        string $companyId,
+        string $name,
+        string $workspacePath,
+        string $repoUrl = '',
+    ): array {
         $membership = $this->identity->requireMembership($userId, $companyId);
         $this->identity->assertCanWrite((string) $membership['role']);
         if ($name === '') {
             throw new HolderException('missing_field', 'Name is required.', 422);
         }
         $id = Ids::uuid();
+        $repoUrl = trim($repoUrl);
+        $storedRepo = '';
+        $branch = '';
+        if ($repoUrl !== '') {
+            $storedRepo = GithubUrl::canonicalize($repoUrl);
+            $company = $this->db->one(
+                'SELECT github_token FROM companies WHERE id = :id',
+                ['id' => $companyId],
+            );
+            $stored = $company === null ? null : ($company['github_token'] ?? null);
+            if (!is_string($stored) || $stored === '') {
+                throw new HolderException('github_token_missing', 'github_token_missing', 422);
+            }
+            $branch = $this->checkout->cloneRepository($id, $storedRepo, $this->cipher->open($stored));
+            $workspacePath = $this->checkout->directory($id);
+        }
         $this->db->exec(
-            'INSERT INTO projects (id, company_id, name, workspace_path) VALUES (:id, :company_id, :name, :workspace_path)',
-            ['id' => $id, 'company_id' => $companyId, 'name' => $name, 'workspace_path' => $workspacePath],
+            'INSERT INTO projects (id, company_id, name, workspace_path, repo_url, default_branch)
+             VALUES (:id, :company_id, :name, :workspace_path, :repo_url, :default_branch)',
+            [
+                'id' => $id,
+                'company_id' => $companyId,
+                'name' => $name,
+                'workspace_path' => $workspacePath,
+                'repo_url' => $storedRepo,
+                'default_branch' => $branch,
+            ],
         );
 
         return [
@@ -116,6 +152,8 @@ final class WorkService
             'companyId' => $companyId,
             'name' => $name,
             'workspacePath' => $workspacePath,
+            'repoUrl' => $storedRepo,
+            'defaultBranch' => $branch,
         ];
     }
 

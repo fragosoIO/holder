@@ -62,6 +62,20 @@ final class GitClient
         }
     }
 
+    /**
+     * @param list<string> $args
+     */
+    public function capture(array $args, string $token): GitResult
+    {
+        $ignoreArgs = ini_get('zend.exception_ignore_args');
+        ini_set('zend.exception_ignore_args', '1');
+        try {
+            return $this->execute($this->git, $args, $token, 'git_unavailable');
+        } finally {
+            ini_set('zend.exception_ignore_args', $ignoreArgs === false ? '0' : $ignoreArgs);
+        }
+    }
+
     public function redact(string $text, string $token): string
     {
         if ($token !== '') {
