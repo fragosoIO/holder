@@ -345,6 +345,8 @@ final class WorkService
             $this->wakeAssignee($companyId, $taskId, $previousAssignee, $previousStatus, $status);
         });
 
+        $this->releaseWorktree($companyId, $taskId, $previousStatus, $status);
+
         return $this->getTask($userId, $companyId, $taskId);
     }
 
@@ -501,6 +503,8 @@ final class WorkService
             $this->settleBlockers($companyId, $taskId, $previousStatus, $status);
             $this->wakeAssignee($companyId, $taskId, $previousAssignee, $previousStatus, $status);
         });
+
+        $this->releaseWorktree($companyId, $taskId, $previousStatus, $status);
 
         return $this->taskResource($this->requireTaskRow($companyId, $taskId), true);
     }
@@ -1043,6 +1047,25 @@ final class WorkService
         if ($previousStatus === 'blocked') {
             $this->enqueue($companyId, $assignee, $taskId, 'unblocked');
         }
+    }
+
+    private function releaseWorktree(string $companyId, string $taskId, string $previous, string $status): void
+    {
+        if (($status !== 'done' && $status !== 'cancelled') || $previous === $status) {
+            return;
+        }
+        $task = $this->requireTaskRow($companyId, $taskId);
+        if ($task['project_id'] === null) {
+            return;
+        }
+        $project = $this->db->one(
+            'SELECT repo_url FROM projects WHERE id = :id AND company_id = :company_id',
+            ['id' => $task['project_id'], 'company_id' => $companyId],
+        );
+        if ($project === null || (string) $project['repo_url'] === '') {
+            return;
+        }
+        $this->checkout->remove((string) $task['project_id'], $taskId);
     }
 
     /**

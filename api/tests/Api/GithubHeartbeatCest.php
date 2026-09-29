@@ -88,6 +88,40 @@ final readonly class GithubHeartbeatCest
         assertSame($marker, (string) file_get_contents(self::CWD_FILE));
     }
 
+    public function finishingARepositoryTaskRemovesTheWorktree(ApiTester $I): void
+    {
+        [$companyId] = $this->ownerAgent($I);
+        $project = $this->repository($I, $companyId);
+        $taskId = $this->task($I, $companyId, null, $project['id']);
+
+        file_put_contents(self::GIT_LOG, '');
+        $I->sendPATCH('/api/v1/companies/' . $companyId . '/tasks/' . $taskId, ['status' => 'done']);
+        $I->seeResponseCodeIs(HttpCode::OK);
+        assertSame('done', $I->grabDataFromResponseByJsonPath('$.data.status')[0]);
+
+        $log = (string) file_get_contents(self::GIT_LOG);
+        assertStringContainsString('worktree remove --force', $log);
+        assertStringContainsString('branch -D holder/' . $taskId, $log);
+    }
+
+    public function aFailedRemovalStillMarksTheTaskDone(ApiTester $I): void
+    {
+        [$companyId] = $this->ownerAgent($I);
+        $project = $this->repository($I, $companyId);
+        $taskId = $this->task($I, $companyId, null, $project['id']);
+        $fail = '/tmp/holder-fake-git.fail';
+        file_put_contents($fail, 'remove');
+        try {
+            $I->sendPATCH('/api/v1/companies/' . $companyId . '/tasks/' . $taskId, ['status' => 'done']);
+            $I->seeResponseCodeIs(HttpCode::OK);
+            assertSame('done', $I->grabDataFromResponseByJsonPath('$.data.status')[0]);
+        } finally {
+            if (is_file($fail)) {
+                unlink($fail);
+            }
+        }
+    }
+
     /** @return array{0: string, 1: string} */
     private function ownerAgent(ApiTester $I): array
     {
@@ -131,13 +165,15 @@ final readonly class GithubHeartbeatCest
         ];
     }
 
-    private function task(ApiTester $I, string $companyId, string $agentId, ?string $projectId): string
+    private function task(ApiTester $I, string $companyId, ?string $agentId, ?string $projectId): string
     {
         $payload = [
             'title' => $projectId === null ? 'Write the folder note' : 'Write the health check',
             'description' => 'Make /api/v1/health return ok.',
-            'assigneeAgentId' => $agentId,
         ];
+        if ($agentId !== null) {
+            $payload['assigneeAgentId'] = $agentId;
+        }
         if ($projectId !== null) {
             $payload['projectId'] = $projectId;
         }
