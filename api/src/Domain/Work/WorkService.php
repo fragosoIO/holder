@@ -131,21 +131,30 @@ final class WorkService
             if (!is_string($stored) || $stored === '') {
                 throw new HolderException('github_token_missing', 'github_token_missing', 422);
             }
-            $branch = $this->checkout->cloneRepository($id, $storedRepo, $this->cipher->open($stored));
-            $workspacePath = $this->checkout->directory($id);
+            // The opened token is in this frame until the insert finishes.
+            $ignoreArgs = ini_get('zend.exception_ignore_args');
+            ini_set('zend.exception_ignore_args', '1');
+            $cloned = false;
+            try {
+                $branch = $this->checkout->cloneRepository($id, $storedRepo, $this->cipher->open($stored));
+                $cloned = true;
+                $workspacePath = $this->checkout->directory($id);
+                $this->insertProject($id, $companyId, $name, $workspacePath, $storedRepo, $branch);
+            } catch (\Throwable $error) {
+                if ($cloned) {
+                    try {
+                        $this->checkout->deleteRepository($id);
+                    } catch (\Throwable) {
+                        // A failed delete must not hide the insert error.
+                    }
+                }
+                throw $error;
+            } finally {
+                ini_set('zend.exception_ignore_args', $ignoreArgs === false ? '0' : $ignoreArgs);
+            }
+        } else {
+            $this->insertProject($id, $companyId, $name, $workspacePath, $storedRepo, $branch);
         }
-        $this->db->exec(
-            'INSERT INTO projects (id, company_id, name, workspace_path, repo_url, default_branch)
-             VALUES (:id, :company_id, :name, :workspace_path, :repo_url, :default_branch)',
-            [
-                'id' => $id,
-                'company_id' => $companyId,
-                'name' => $name,
-                'workspace_path' => $workspacePath,
-                'repo_url' => $storedRepo,
-                'default_branch' => $branch,
-            ],
-        );
 
         return [
             'id' => $id,
@@ -155,6 +164,28 @@ final class WorkService
             'repoUrl' => $storedRepo,
             'defaultBranch' => $branch,
         ];
+    }
+
+    private function insertProject(
+        string $id,
+        string $companyId,
+        string $name,
+        string $workspacePath,
+        string $repoUrl,
+        string $branch,
+    ): void {
+        $this->db->exec(
+            'INSERT INTO projects (id, company_id, name, workspace_path, repo_url, default_branch)
+             VALUES (:id, :company_id, :name, :workspace_path, :repo_url, :default_branch)',
+            [
+                'id' => $id,
+                'company_id' => $companyId,
+                'name' => $name,
+                'workspace_path' => $workspacePath,
+                'repo_url' => $repoUrl,
+                'default_branch' => $branch,
+            ],
+        );
     }
 
     /**

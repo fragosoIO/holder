@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Unit;
 
 use App\Domain\Github\GitClient;
+use App\Domain\Github\RepoCheckout;
 use App\Domain\HolderConfig;
 use App\Domain\HolderException;
 use Codeception\Test\Unit;
@@ -104,6 +105,50 @@ final class GitClientTest extends Unit
         }
     }
 
+    public function testMissingGitDoesNotLeaveTheTokenInTheTrace(): void
+    {
+        $this->assertTokenStaysOutOfTheTrace(function (RepoCheckout $checkout): void {
+            $checkout->cloneRepository('project-id', 'https://github.com/Acme/Widget', 'ghp_secret');
+        }, new GitClient($this->config(), '/no/such/git'), 'git_unavailable');
+    }
+
+    public function testSymbolicRefFailureDoesNotLeaveTheTokenInTheTrace(): void
+    {
+        $git = $this->root . '/symbolic-ref-git';
+        file_put_contents($git, <<<'SH'
+#!/bin/sh
+if [ "${1:-}" = "--version" ]; then
+  echo "git version 2.fake"
+  exit 0
+fi
+if [ "${1:-}" = "-C" ]; then
+  shift 2
+fi
+cmd="${1:-}"
+if [ "$cmd" = "clone" ]; then
+  for dest do :; done
+  mkdir -p "$dest"
+  exit 0
+fi
+if [ "$cmd" = "symbolic-ref" ]; then
+  echo "fatal: symbolic ref failed" >&2
+  exit 1
+fi
+echo "unexpected git command" >&2
+exit 1
+SH);
+        chmod($git, 0755);
+        $dest = $this->root . '/repos/project-id';
+
+        $this->assertTokenStaysOutOfTheTrace(function (RepoCheckout $checkout) use ($dest): void {
+            try {
+                $checkout->cloneRepository('project-id', 'https://github.com/Acme/Widget', 'ghp_secret');
+            } finally {
+                $this->assertDirectoryDoesNotExist($dest);
+            }
+        }, new GitClient($this->config(), $git), 'github_clone_failed');
+    }
+
     public function testRedactStripsTheTokenAndEmbeddedUserinfo(): void
     {
         $redacted = $this->client()->redact(
@@ -138,6 +183,26 @@ final class GitClientTest extends Unit
                 putenv('HOLDER_FAKE_GH_MISSING=' . $previous);
                 $_ENV['HOLDER_FAKE_GH_MISSING'] = $previous;
             }
+        }
+    }
+
+    private function assertTokenStaysOutOfTheTrace(\Closure $call, GitClient $git, string $errorCode): void
+    {
+        $previous = ini_get('zend.exception_ignore_args');
+        ini_set('zend.exception_ignore_args', '0');
+        try {
+            $checkout = new RepoCheckout($this->config(), $git);
+            try {
+                $call($checkout);
+                $this->fail('Expected HolderException was not thrown.');
+            } catch (HolderException $error) {
+                $this->assertSame($errorCode, $error->errorCode);
+                $this->assertStringNotContainsString('ghp_secret', $error->getMessage());
+                $this->assertStringNotContainsString('ghp_secret', $error->getTraceAsString());
+            }
+            $this->assertSame('0', ini_get('zend.exception_ignore_args'));
+        } finally {
+            ini_set('zend.exception_ignore_args', $previous === false ? '0' : $previous);
         }
     }
 

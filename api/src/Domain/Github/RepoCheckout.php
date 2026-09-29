@@ -19,29 +19,41 @@ final class RepoCheckout
         return $this->config->dataDir . '/repos/' . $projectId;
     }
 
+    public function deleteRepository(string $projectId): void
+    {
+        $this->delete($this->directory($projectId));
+    }
+
     public function cloneRepository(string $projectId, string $canonicalUrl, string $token): string
     {
-        $this->git->assertGit();
-        $dest = $this->directory($projectId);
-        $this->delete($dest);
+        // $token is an argument. Traces record arguments while this is off.
+        $ignoreArgs = ini_get('zend.exception_ignore_args');
+        ini_set('zend.exception_ignore_args', '1');
         try {
-            $this->git->run(['clone', '--origin', 'origin', $canonicalUrl, $dest], $token);
-            $result = $this->git->capture(
-                ['-C', $dest, 'symbolic-ref', '--short', 'refs/remotes/origin/HEAD'],
-                $token,
-            );
-            if ($result->exit !== 0) {
-                throw new HolderException(
-                    'github_clone_failed',
-                    'github_clone_failed: ' . $this->firstLine($this->git->redact($result->stderr, $token)),
-                    422,
-                );
-            }
-
-            return $this->branchName($result->stdout);
-        } catch (\Throwable $error) {
+            $this->git->assertGit();
+            $dest = $this->directory($projectId);
             $this->delete($dest);
-            throw $error;
+            try {
+                $this->git->run(['clone', '--origin', 'origin', $canonicalUrl, $dest], $token);
+                $result = $this->git->capture(
+                    ['-C', $dest, 'symbolic-ref', '--short', 'refs/remotes/origin/HEAD'],
+                    $token,
+                );
+                if ($result->exit !== 0) {
+                    throw new HolderException(
+                        'github_clone_failed',
+                        'github_clone_failed: ' . $this->firstLine($this->git->redact($result->stderr, $token)),
+                        422,
+                    );
+                }
+
+                return $this->branchName($result->stdout);
+            } catch (\Throwable $error) {
+                $this->delete($dest);
+                throw $error;
+            }
+        } finally {
+            ini_set('zend.exception_ignore_args', $ignoreArgs === false ? '0' : $ignoreArgs);
         }
     }
 
