@@ -1,0 +1,4 @@
+#!/bin/sh
+pwd > "${FAKE_PI_CWD_FILE:-/tmp/holder-pi-cwd}"
+env > "${FAKE_PI_ENV_FILE:-/tmp/holder-pi-env}"
+exec php "$(dirname "$0")/fake-pi.php" "$@"
