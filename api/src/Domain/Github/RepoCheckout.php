@@ -89,6 +89,9 @@ final class RepoCheckout
                 if ($this->listsWorktree($listed->stdout, $worktree)) {
                     return ['worktree' => $worktree, 'defaultBranch' => $branch];
                 }
+                if (is_link($worktree) || file_exists($worktree)) {
+                    $this->delete($worktree);
+                }
 
                 $name = 'holder/' . $taskId;
                 $local = $this->git->capture(
@@ -115,7 +118,7 @@ final class RepoCheckout
                 }
 
                 $this->git->run(
-                    ['-C', $clone, 'worktree', 'add', '-b', $name, $worktree, 'origin/' . $defaultBranch],
+                    ['-C', $clone, 'worktree', 'add', '-b', $name, $worktree, 'origin/' . $branch],
                     $token,
                 );
 

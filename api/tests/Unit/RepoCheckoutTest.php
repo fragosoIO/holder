@@ -93,6 +93,45 @@ final class RepoCheckoutTest extends Unit
         $this->assertStringContainsString('clone', substr((string) file_get_contents($this->log), strlen($before)));
     }
 
+    public function testPrepareDeletesAnUnregisteredWorktreeAndKeepsARegisteredOne(): void
+    {
+        $checkout = $this->checkout();
+        $worktree = $this->root . '/worktrees/task';
+        $planted = $worktree . '/dirty.txt';
+        $checkout->prepare('project', 'task', 'https://github.com/Acme/Widget', 'main', 'ghp_secret');
+        file_put_contents($planted, 'keep');
+
+        $checkout->prepare('project', 'task', 'https://github.com/Acme/Widget', 'develop', 'ghp_secret');
+        $this->assertSame('keep', (string) file_get_contents($planted));
+
+        $this->removeTree($checkout->directory('project'));
+        // fake-git lists every historical worktree add. A new clone has none.
+        file_put_contents($this->log, '');
+        $checkout->prepare('project', 'task', 'https://github.com/Acme/Widget', 'develop', 'ghp_secret');
+
+        $this->assertFileDoesNotExist($planted);
+    }
+
+    public function testPrepareStartsAReclonedWorktreeAtOriginHead(): void
+    {
+        $checkout = $this->checkout();
+        $worktree = $this->root . '/worktrees/task';
+        $checkout->prepare('project', 'task', 'https://github.com/Acme/Widget', 'main', 'ghp_secret');
+        file_put_contents($worktree . '/dirty.txt', 'keep');
+        $this->removeTree($checkout->directory('project'));
+        // fake-git lists every historical worktree add. A new clone has none.
+        file_put_contents($this->log, '');
+
+        $again = $checkout->prepare('project', 'task', 'https://github.com/Acme/Widget', 'develop', 'ghp_secret');
+
+        $this->assertSame('main', $again['defaultBranch']);
+        $this->assertSame($worktree, $again['worktree']);
+        $log = (string) file_get_contents($this->log);
+        $this->assertStringContainsString('worktree add -b holder/task', $log);
+        $this->assertStringContainsString('origin/main', $log);
+        $this->assertStringNotContainsString('origin/develop', $log);
+    }
+
     public function testASecondPrepareDoesNotAddTheWorktreeAgain(): void
     {
         $checkout = $this->checkout();
