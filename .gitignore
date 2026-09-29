@@ -1,0 +1,8 @@
+api/vendor/
+api/runtime/
+api/.env
+api/tests/_output/
+ui/node_modules/
+ui/dist/
+
+.worktrees/

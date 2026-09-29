@@ -1,0 +1,79 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+$command = $argv[1] ?? '';
+$options = [];
+for ($i = 2; $i < $argc; $i++) {
+    $arg = $argv[$i];
+    if (!str_starts_with($arg, '--')) {
+        continue;
+    }
+    $name = substr($arg, 2);
+    $value = $argv[$i + 1] ?? '';
+    if ($value === '' || str_starts_with($value, '--')) {
+        continue;
+    }
+    $i++;
+    if (!array_key_exists($name, $options)) {
+        $options[$name] = $value;
+        continue;
+    }
+    if (!is_array($options[$name])) {
+        $options[$name] = [$options[$name]];
+    }
+    $options[$name][] = $value;
+}
+
+$api = rtrim((string) getenv('HOLDER_API_URL'), '/');
+$token = (string) getenv('HOLDER_RUN_TOKEN');
+$task = $options['task'] ?? (string) getenv('HOLDER_TASK_ID');
+
+if ($api === '' || $token === '' || $task === '') {
+    fwrite(STDERR, "HOLDER_API_URL, HOLDER_RUN_TOKEN, and a task id are required.\n");
+    exit(1);
+}
+
+if ($command === 'comment') {
+    $path = '/api/v1/agent/tasks/' . rawurlencode($task) . '/comments';
+    $payload = ['body' => $options['body'] ?? ''];
+} elseif ($command === 'status') {
+    $path = '/api/v1/agent/tasks/' . rawurlencode($task) . '/status';
+    $payload = ['status' => $options['status'] ?? ''];
+    if (isset($options['blocked-by'])) {
+        $ids = $options['blocked-by'];
+        $payload['blockerIds'] = is_array($ids) ? array_values($ids) : [$ids];
+    }
+} elseif ($command === 'questions') {
+    $path = '/api/v1/agent/tasks/' . rawurlencode($task) . '/questions';
+    $decoded = json_decode($options['body'] ?? '', true);
+    if (!is_array($decoded)) {
+        fwrite(STDERR, "holder questions expects --body JSON with a questions array.\n");
+        exit(1);
+    }
+    $payload = $decoded;
+} elseif ($command === 'assign') {
+    $path = '/api/v1/agent/tasks/' . rawurlencode($task) . '/assign';
+    $payload = ['assigneeAgentId' => $options['agent'] ?? ''];
+} else {
+    fwrite(STDERR, "Usage: holder comment --task ID --body TEXT\n       holder status --task ID --status STATUS [--blocked-by TASK_ID]\n       holder questions --task ID --body JSON\n       holder assign --task ID --agent AGENT_ID\n");
+    exit(1);
+}
+
+$context = stream_context_create([
+    'http' => [
+        'method' => 'POST',
+        'header' => "Content-Type: application/json\r\nAuthorization: Bearer {$token}\r\n",
+        'content' => json_encode($payload),
+        'ignore_errors' => true,
+        'timeout' => 15,
+    ],
+]);
+$result = file_get_contents($api . $path, false, $context);
+$status = 0;
+if (isset($http_response_header[0]) && preg_match('/\s(\d{3})\s/', (string) $http_response_header[0], $match) === 1) {
+    $status = (int) $match[1];
+}
+fwrite(STDOUT, is_string($result) ? $result . "\n" : "\n");
+exit($status >= 200 && $status < 300 ? 0 : 1);

@@ -1,0 +1,11 @@
+actor: ApiTester
+extensions:
+  enabled:
+    - Codeception\Extension\RunProcess:
+        0: php ./yii serve 127.0.0.1 --port=8081
+        sleep: 3
+modules:
+  enabled:
+    - REST:
+        url: http://127.0.0.1:8081
+        depends: PhpBrowser
