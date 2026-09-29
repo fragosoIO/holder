@@ -50,6 +50,12 @@ fi
 if [ "$cmd" = "worktree" ]; then
   sub="${2:-}"
   if [ "$sub" = "list" ]; then
+    case "$mode" in
+      *list*)
+        echo "fatal: worktree list failed" >&2
+        exit 1
+        ;;
+    esac
     grep "worktree add" "$log" | while IFS= read -r line; do
       path=""
       for word in $line; do

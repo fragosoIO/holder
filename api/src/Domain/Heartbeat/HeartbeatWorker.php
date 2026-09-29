@@ -163,14 +163,17 @@ final class HeartbeatWorker
                 ];
             }
         }
+        $goalChain = $this->goalChain($task['goal_id'] !== null ? (string) $task['goal_id'] : null);
+        $budgetRemaining = $budget === null ? null : (int) $budget - (int) $agent['spent_cents'];
+        $wakeReason = (string) $wakeup['reason'];
         $prompt = $this->prompts->build(
             $company,
-            $this->goalChain($task['goal_id'] !== null ? (string) $task['goal_id'] : null),
+            $goalChain,
             $task,
             $comments,
             $agent,
-            $budget === null ? null : (int) $budget - (int) $agent['spent_cents'],
-            (string) $wakeup['reason'],
+            $budgetRemaining,
+            $wakeReason,
             $reports,
             $repository,
         );
@@ -244,9 +247,25 @@ final class HeartbeatWorker
                 );
                 $workspace = $prepared['worktree'];
                 if ($prepared['defaultBranch'] !== (string) $project['default_branch']) {
+                    $repository['defaultBranch'] = $prepared['defaultBranch'];
+                    $prompt = $this->prompts->build(
+                        $company,
+                        $goalChain,
+                        $task,
+                        $comments,
+                        $agent,
+                        $budgetRemaining,
+                        $wakeReason,
+                        $reports,
+                        $repository,
+                    );
                     $this->db->exec(
                         'UPDATE projects SET default_branch = :default_branch WHERE id = :id',
                         ['default_branch' => $prepared['defaultBranch'], 'id' => $project['id']],
+                    );
+                    $this->db->exec(
+                        'UPDATE runs SET prompt = :prompt WHERE id = :id',
+                        ['prompt' => $prompt, 'id' => $runId],
                     );
                 }
                 $this->git->assertGh();

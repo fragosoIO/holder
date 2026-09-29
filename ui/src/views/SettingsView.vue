@@ -12,9 +12,11 @@ const githubToken = ref('')
 const message = ref('')
 const error = ref('')
 
-watch(company, (value) => {
-  mission.value = value?.mission ?? ''
-  name.value = value?.name ?? ''
+watch(() => company.value?.id, (id, previous) => {
+  if (id === previous) return
+  githubToken.value = ''
+  name.value = company.value?.name ?? ''
+  mission.value = company.value?.mission ?? ''
 }, { immediate: true })
 
 async function save() {

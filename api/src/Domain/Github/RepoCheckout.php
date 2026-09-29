@@ -49,7 +49,11 @@ final class RepoCheckout
 
                 return $this->branchName($result->stdout);
             } catch (\Throwable $error) {
-                $this->delete($dest);
+                try {
+                    $this->delete($dest);
+                } catch (\Throwable) {
+                    // Cleanup must not replace the git failure.
+                }
                 throw $error;
             }
         } finally {
@@ -86,6 +90,13 @@ final class RepoCheckout
 
                 $worktree = $this->worktreePath($taskId);
                 $listed = $this->git->capture(['-C', $clone, 'worktree', 'list', '--porcelain'], $token);
+                if ($listed->exit !== 0) {
+                    throw new HolderException(
+                        'github_clone_failed',
+                        'github_clone_failed: ' . $this->firstLine($this->git->redact($listed->stderr, $token)),
+                        422,
+                    );
+                }
                 if ($this->listsWorktree($listed->stdout, $worktree)) {
                     return ['worktree' => $worktree, 'defaultBranch' => $branch];
                 }
@@ -208,14 +219,14 @@ final class RepoCheckout
     private function delete(string $path): void
     {
         if (is_link($path) || is_file($path)) {
-            unlink($path);
+            @unlink($path);
 
             return;
         }
         if (!is_dir($path)) {
             return;
         }
-        $items = scandir($path);
+        $items = @scandir($path);
         if ($items === false) {
             return;
         }
@@ -225,6 +236,6 @@ final class RepoCheckout
             }
             $this->delete($path . '/' . $item);
         }
-        rmdir($path);
+        @rmdir($path);
     }
 }

@@ -118,16 +118,66 @@ final class GitClient
         }
 
         fclose($pipes[0]);
-        $stdout = stream_get_contents($pipes[1]);
-        $stderr = stream_get_contents($pipes[2]);
-        fclose($pipes[1]);
-        fclose($pipes[2]);
+        [$stdout, $stderr] = $this->readPipes($pipes[1], $pipes[2]);
 
-        return new GitResult(
-            proc_close($process),
-            is_string($stdout) ? $stdout : '',
-            is_string($stderr) ? $stderr : '',
-        );
+        return new GitResult(proc_close($process), $stdout, $stderr);
+    }
+
+    /**
+     * Read stdout and stderr together until both reach EOF.
+     *
+     * A child that fills the stderr pipe before it exits never closes stdout.
+     * Reading one pipe to completion first deadlocks, including bytes still
+     * buffered after the process has gone.
+     *
+     * @param resource $stdoutPipe
+     * @param resource $stderrPipe
+     *
+     * @return array{string, string}
+     */
+    private function readPipes($stdoutPipe, $stderrPipe): array
+    {
+        stream_set_blocking($stdoutPipe, false);
+        stream_set_blocking($stderrPipe, false);
+        stream_set_read_buffer($stdoutPipe, 0);
+        stream_set_read_buffer($stderrPipe, 0);
+
+        $stdout = '';
+        $stderr = '';
+        /** @var array<int, resource> $open */
+        $open = [1 => $stdoutPipe, 2 => $stderrPipe];
+        while ($open !== []) {
+            $watch = array_values($open);
+            $write = null;
+            $except = null;
+            $ready = @stream_select($watch, $write, $except, 0, 200000);
+            $streams = is_int($ready) && $ready > 0 ? $watch : array_values($open);
+            $pulled = false;
+            foreach ($streams as $stream) {
+                $index = $stream === $stdoutPipe ? 1 : 2;
+                if (!isset($open[$index])) {
+                    continue;
+                }
+                $chunk = fread($stream, 65536);
+                if (is_string($chunk) && $chunk !== '') {
+                    $pulled = true;
+                    if ($index === 1) {
+                        $stdout .= $chunk;
+                    } else {
+                        $stderr .= $chunk;
+                    }
+                }
+                if (feof($stream)) {
+                    fclose($stream);
+                    unset($open[$index]);
+                }
+            }
+            if (!$pulled && $ready !== 0) {
+                usleep(1000);
+            }
+        }
+
+        return [$stdout, $stderr];
     }
 
     /**

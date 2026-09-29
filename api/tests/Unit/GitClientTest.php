@@ -149,6 +149,25 @@ SH);
         }, new GitClient($this->config(), $git), 'github_clone_failed');
     }
 
+    public function testCaptureReturnsStdoutAndStderrWhenStderrFillsThePipe(): void
+    {
+        $git = $this->root . '/noisy-git';
+        file_put_contents($git, <<<'SH'
+#!/bin/sh
+php -r 'fwrite(STDERR, str_repeat("x", 70000)); fwrite(STDOUT, "ok");'
+SH);
+        chmod($git, 0755);
+        $client = new GitClient($this->config(), $git);
+
+        $started = microtime(true);
+        $result = $client->capture(['status'], 'ghp_secret');
+
+        $this->assertLessThan(5, microtime(true) - $started);
+        $this->assertSame(0, $result->exit);
+        $this->assertSame('ok', $result->stdout);
+        $this->assertSame(str_repeat('x', 70000), $result->stderr);
+    }
+
     public function testRedactStripsTheTokenAndEmbeddedUserinfo(): void
     {
         $redacted = $this->client()->redact(

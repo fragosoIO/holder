@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Tests\Api;
 
+use App\Shared\Env;
 use App\Tests\Support\ApiTester;
 use Codeception\Util\HttpCode;
 
+use function PHPUnit\Framework\assertFalse;
 use function PHPUnit\Framework\assertSame;
 use function PHPUnit\Framework\assertStringContainsString;
 use function PHPUnit\Framework\assertStringEndsWith;
@@ -59,6 +61,33 @@ final readonly class GithubHeartbeatCest
         } finally {
             putenv('GH_TOKEN');
         }
+    }
+
+    public function aRecloneReplacesAStaleDefaultBranchInThePrompt(ApiTester $I): void
+    {
+        [$companyId, $agentId] = $this->ownerAgent($I);
+        $project = $this->repository($I, $companyId);
+        $taskId = $this->task($I, $companyId, $agentId, $project['id']);
+        $clone = $project['workspace'];
+        assertStringContainsString('/repos/' . $project['id'], $clone);
+        assertTrue(is_dir($clone));
+        $this->removeTree($clone);
+        assertFalse(is_dir($clone));
+
+        $pdo = $this->pdo();
+        $pdo->prepare('UPDATE projects SET default_branch = :branch WHERE id = :id')
+            ->execute(['branch' => 'stale', 'id' => $project['id']]);
+
+        file_put_contents(self::GIT_LOG, '');
+        $this->workOnce();
+
+        $run = $this->run($I, $companyId, $taskId);
+        assertStringContainsString('Use main as the base', $run['prompt']);
+        assertStringNotContainsString('stale', $run['prompt']);
+
+        $statement = $pdo->prepare('SELECT default_branch FROM projects WHERE id = :id');
+        $statement->execute(['id' => $project['id']]);
+        assertSame('main', $statement->fetchColumn());
     }
 
     public function aMissingGhFailsTheRunWithoutStartingPi(ApiTester $I): void
@@ -213,5 +242,45 @@ final readonly class GithubHeartbeatCest
     private function env(): string
     {
         return (string) file_get_contents(self::ENV_FILE);
+    }
+
+    private function pdo(): \PDO
+    {
+        $pdo = new \PDO(
+            sprintf(
+                'pgsql:host=%s;port=%s;dbname=%s',
+                Env::get('HOLDER_DB_HOST', '127.0.0.1'),
+                Env::get('HOLDER_DB_PORT', '5432'),
+                Env::get('HOLDER_DB_NAME', 'holder'),
+            ),
+            Env::get('HOLDER_DB_USER', 'holder'),
+            Env::get('HOLDER_DB_PASSWORD', 'holder'),
+        );
+        $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+
+        return $pdo;
+    }
+
+    private function removeTree(string $path): void
+    {
+        if (is_link($path) || is_file($path)) {
+            unlink($path);
+
+            return;
+        }
+        if (!is_dir($path)) {
+            return;
+        }
+        $items = scandir($path);
+        if ($items === false) {
+            return;
+        }
+        foreach ($items as $item) {
+            if ($item === '.' || $item === '..') {
+                continue;
+            }
+            $this->removeTree($path . '/' . $item);
+        }
+        rmdir($path);
     }
 }

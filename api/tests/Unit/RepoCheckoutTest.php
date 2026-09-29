@@ -93,6 +93,51 @@ final class RepoCheckoutTest extends Unit
         $this->assertStringContainsString('clone', substr((string) file_get_contents($this->log), strlen($before)));
     }
 
+    public function testPrepareThrowsWhenWorktreeListFailsAndKeepsTheWorktree(): void
+    {
+        file_put_contents($this->failFile, 'list');
+        $checkout = $this->checkout();
+        $worktree = $this->root . '/worktrees/task';
+        $planted = $worktree . '/dirty.txt';
+        mkdir($worktree, 0777, true);
+        file_put_contents($planted, 'keep');
+
+        try {
+            $checkout->prepare('project', 'task', 'https://github.com/Acme/Widget', 'main', 'ghp_secret');
+            $this->fail('Expected HolderException was not thrown.');
+        } catch (HolderException $error) {
+            $this->assertSame('github_clone_failed', $error->errorCode);
+            $this->assertSame(422, $error->status);
+            $this->assertSame('github_clone_failed: fatal: worktree list failed', $error->getMessage());
+            $this->assertStringNotContainsString('ghp_secret', $error->getMessage());
+        }
+
+        $this->assertSame('keep', (string) file_get_contents($planted));
+    }
+
+    public function testDeleteRepositoryDoesNotThrowUnderTheErrorHandler(): void
+    {
+        $checkout = $this->checkout();
+        $directory = $checkout->directory('project');
+        mkdir($directory . '/nested', 0777, true);
+        file_put_contents($directory . '/nested/note.txt', 'x');
+
+        set_error_handler(static function (int $severity, string $message): bool {
+            if (error_reporting() & $severity) {
+                throw new \ErrorException($message, 0, $severity);
+            }
+
+            return true;
+        });
+        try {
+            $checkout->deleteRepository('project');
+        } finally {
+            restore_error_handler();
+        }
+
+        $this->assertDirectoryDoesNotExist($directory);
+    }
+
     public function testPrepareDeletesAnUnregisteredWorktreeAndKeepsARegisteredOne(): void
     {
         $checkout = $this->checkout();
