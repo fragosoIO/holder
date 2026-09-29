@@ -1065,7 +1065,11 @@ final class WorkService
         if ($project === null || (string) $project['repo_url'] === '') {
             return;
         }
-        $this->checkout->remove((string) $task['project_id'], $taskId);
+        try {
+            $this->checkout->remove((string) $task['project_id'], $taskId);
+        } catch (\Throwable) {
+            // The status is already committed. Cleanup must not fail the request.
+        }
     }
 
     /**
