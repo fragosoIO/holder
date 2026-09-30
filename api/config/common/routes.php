@@ -28,6 +28,7 @@ return [
             Route::post('/onboarding')->action([OnboardingEndpoints::class, 'complete'])->name('onboarding/complete'),
             Route::get('/companies/{companyId}')->action([CompanyEndpoints::class, 'show'])->name('companies/show'),
             Route::patch('/companies/{companyId}')->action([CompanyEndpoints::class, 'update'])->name('companies/update'),
+            Route::put('/companies/{companyId}/github-token')->action([CompanyEndpoints::class, 'saveGithubToken'])->name('companies/github-token'),
             Route::post('/companies/{companyId}/invites')->action([CompanyEndpoints::class, 'invite'])->name('companies/invite'),
             Route::post('/invites/{token}/accept')->action([CompanyEndpoints::class, 'acceptInvite'])->name('invites/accept'),
 

@@ -142,4 +142,103 @@ final class PromptBuilderTest extends Unit
         $this->assertStringContainsString('holder assign --task task-1 --agent AGENT_ID', $prompt);
         $this->assertStringNotContainsString('Before you do this task, check whether one of these agents is more appropriate', $prompt);
     }
+
+    public function testRepositoryPromptTellsTheAgentToOpenAPullRequest(): void
+    {
+        $prompt = (new PromptBuilder())->build(
+            ['name' => 'Acme', 'mission' => 'Ship Holder'],
+            [
+                ['title' => 'Company', 'description' => 'The whole firm'],
+                ['title' => 'Product', 'description' => 'The app'],
+            ],
+            [
+                'id' => 'task-1',
+                'title' => 'Health check',
+                'description' => 'Return ok',
+                'status' => 'todo',
+                'blockers' => [['title' => 'Design', 'status' => 'done']],
+            ],
+            [['author_type' => 'user', 'body' => 'Start here']],
+            ['name' => 'Ada', 'title' => 'Engineer', 'job_description' => 'Builds'],
+            null,
+            'blockers_resolved',
+            [],
+            [
+                'repoUrl' => 'https://github.com/Acme/Widget',
+                'branch' => 'holder/task-1',
+                'defaultBranch' => 'main',
+                'reviewBranches' => [],
+            ],
+        );
+
+        $this->assertStringContainsString('Repository: https://github.com/Acme/Widget', $prompt);
+        $this->assertStringContainsString('holder/task-1', $prompt);
+        $this->assertStringContainsString('git push -u origin holder/task-1', $prompt);
+        $this->assertStringContainsString('gh pr create', $prompt);
+        $this->assertStringContainsString('main as the base', $prompt);
+        $this->assertStringContainsString('Do not push main', $prompt);
+        $this->assertStringContainsString('Do not force-push', $prompt);
+        $this->assertStringContainsString('gh pr view', $prompt);
+        $this->assertStringContainsString('Do not print GH_TOKEN or GITHUB_TOKEN', $prompt);
+        $this->assertStringContainsString('Health check as the pull request title', $prompt);
+        $this->assertStringNotContainsString('ghp_', $prompt);
+    }
+
+    public function testReviewPromptNamesChildBranches(): void
+    {
+        $prompt = (new PromptBuilder())->build(
+            ['name' => 'Acme', 'mission' => 'Ship Holder'],
+            [
+                ['title' => 'Company', 'description' => 'The whole firm'],
+                ['title' => 'Product', 'description' => 'The app'],
+            ],
+            [
+                'id' => 'task-1',
+                'title' => 'Health check',
+                'description' => 'Return ok',
+                'status' => 'todo',
+                'blockers' => [['title' => 'Design', 'status' => 'done']],
+            ],
+            [['author_type' => 'user', 'body' => 'Start here']],
+            ['name' => 'Ada', 'title' => 'Engineer', 'job_description' => 'Builds'],
+            null,
+            'review',
+            [],
+            [
+                'repoUrl' => 'https://github.com/Acme/Widget',
+                'branch' => 'holder/task-1',
+                'defaultBranch' => 'main',
+                'reviewBranches' => ['holder/child-1'],
+            ],
+        );
+
+        $this->assertStringContainsString('holder/child-1', $prompt);
+        $this->assertStringContainsString('Do not open a new pull request', $prompt);
+        $this->assertStringContainsString('Do not print GH_TOKEN', $prompt);
+        $this->assertStringNotContainsString('gh pr create', $prompt);
+    }
+
+    public function testACompanyFolderPromptIsUnchanged(): void
+    {
+        $prompt = (new PromptBuilder())->build(
+            ['name' => 'Acme', 'mission' => 'Ship Holder'],
+            [
+                ['title' => 'Company', 'description' => 'The whole firm'],
+                ['title' => 'Product', 'description' => 'The app'],
+            ],
+            [
+                'id' => 'task-1',
+                'title' => 'Health check',
+                'description' => 'Return ok',
+                'status' => 'todo',
+                'blockers' => [['title' => 'Design', 'status' => 'done']],
+            ],
+            [['author_type' => 'user', 'body' => 'Start here']],
+            ['name' => 'Ada', 'title' => 'Engineer', 'job_description' => 'Builds'],
+            null,
+            'blockers_resolved',
+        );
+
+        $this->assertStringNotContainsString('gh pr create', $prompt);
+    }
 }

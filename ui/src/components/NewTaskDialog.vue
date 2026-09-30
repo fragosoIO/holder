@@ -9,11 +9,12 @@ import { useChrome } from '../stores/chrome'
 const board = useBoard()
 const chrome = useChrome()
 const { company } = storeToRefs(board)
-const { goals, agents } = useWorkspace()
+const { goals, agents, projects, load } = useWorkspace()
 const dialog = ref<HTMLDialogElement | null>(null)
 const title = ref('')
 const description = ref('')
 const goalId = ref('')
+const projectId = ref('')
 const assigneeAgentId = ref('')
 const error = ref('')
 const saving = ref(false)
@@ -23,6 +24,7 @@ watch(() => chrome.newTask, (open) => {
   if (!element) return
   if (open && !element.open) {
     error.value = ''
+    void load()
     element.showModal()
   }
   if (!open && element.open) element.close()
@@ -37,18 +39,27 @@ async function submit() {
   error.value = ''
   saving.value = true
   try {
+    const body: {
+      title: string
+      description: string
+      goalId: string
+      assigneeAgentId: string
+      projectId?: string
+    } = {
+      title: title.value,
+      description: description.value,
+      goalId: goalId.value,
+      assigneeAgentId: assigneeAgentId.value,
+    }
+    if (projectId.value !== '') body.projectId = projectId.value
     await api(`/api/v1/companies/${company.value.id}/tasks`, {
       method: 'POST',
-      body: JSON.stringify({
-        title: title.value,
-        description: description.value,
-        goalId: goalId.value,
-        assigneeAgentId: assigneeAgentId.value,
-      }),
+      body: JSON.stringify(body),
     })
     title.value = ''
     description.value = ''
     goalId.value = ''
+    projectId.value = ''
     assigneeAgentId.value = ''
     chrome.bump()
     close()
@@ -77,6 +88,12 @@ async function submit() {
         <select v-model="goalId" class="field">
           <option value="">No goal</option>
           <option v-for="goal in goals" :key="goal.id" :value="goal.id">{{ goal.title }}</option>
+        </select>
+      </label>
+      <label class="label">Project
+        <select v-model="projectId" class="field">
+          <option value="">No project</option>
+          <option v-for="project in projects" :key="project.id" :value="project.id">{{ project.repoUrl ? project.name + ' · ' + project.repoUrl : project.name }}</option>
         </select>
       </label>
       <label class="label">Assignee

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Identity;
 
 use App\Domain\CompanyWorkspace;
+use App\Domain\Github\TokenCipher;
 use App\Domain\HolderException;
 use App\Domain\Ids;
 use App\Infrastructure\Db;
@@ -16,6 +17,7 @@ final class IdentityService
     public function __construct(
         private readonly Db $db,
         private readonly CompanyWorkspace $workspaces,
+        private readonly TokenCipher $tokens,
     ) {}
 
     /**
@@ -162,6 +164,23 @@ final class IdentityService
         $this->db->exec(
             'UPDATE companies SET name = :name, mission = :mission WHERE id = :id',
             ['name' => $name, 'mission' => $mission, 'id' => $companyId],
+        );
+
+        return $this->requireCompany($userId, $companyId);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function setGithubToken(string $userId, string $companyId, string $token): array
+    {
+        $membership = $this->requireMembership($userId, $companyId);
+        $this->assertCanManage((string) $membership['role']);
+        $token = trim($token);
+        $stored = $token === '' ? null : $this->tokens->seal($token);
+        $this->db->exec(
+            'UPDATE companies SET github_token = :github_token WHERE id = :id',
+            ['github_token' => $stored, 'id' => $companyId],
         );
 
         return $this->requireCompany($userId, $companyId);
@@ -357,6 +376,7 @@ final class IdentityService
             'mission' => (string) $row['mission'],
             'role' => (string) $row['role'],
             'workspacePath' => $this->workspaces->ensure((string) $row['id']),
+            'githubConnected' => is_string($row['github_token'] ?? null) && $row['github_token'] !== '',
         ];
     }
 }

@@ -16,7 +16,7 @@ const route = useRoute()
 const board = useBoard()
 const chrome = useChrome()
 const { company } = storeToRefs(board)
-const { goals, agents, tasks } = useWorkspace()
+const { goals, agents, tasks, projects } = useWorkspace()
 const task = ref<Task | null>(null)
 const body = ref('')
 const answering = ref(false)
@@ -26,6 +26,7 @@ const error = ref('')
 let source: EventSource | null = null
 
 const goalTitle = computed(() => goals.value.find((goal) => goal.id === task.value?.goalId)?.title ?? 'No goal')
+const project = computed(() => projects.value.find((item) => item.id === task.value?.projectId))
 const assignee = computed(() => agents.value.find((agent) => agent.id === task.value?.assigneeAgentId))
 
 function agentName(id: string | null): string {
@@ -307,6 +308,13 @@ onUnmounted(() => source?.close())
         <AgentCapsule :id="assignee.id" :name="assignee.name" />
       </div>
       <p class="text-xs text-muted-foreground">Goal · {{ goalTitle }}</p>
+      <template v-if="project">
+        <p class="text-xs text-muted-foreground">Project · {{ project.name }}</p>
+        <template v-if="project.repoUrl">
+          <a :href="project.repoUrl" target="_blank" rel="noopener" class="block break-all text-xs underline">{{ project.repoUrl }}</a>
+          <p class="font-mono text-xs text-muted-foreground">holder/{{ task.id }}</p>
+        </template>
+      </template>
       <p class="font-mono text-xs text-muted-foreground">{{ shortId(task.id) }}</p>
       <button v-if="task.checkoutRunId" class="btn btn-danger w-full" type="button" @click="cancel">Cancel run</button>
       <p v-if="error" class="text-sm text-destructive" role="alert">{{ error }}</p>

@@ -167,6 +167,8 @@ final class OnboardingService
                 'companyId' => (string) $project['company_id'],
                 'name' => (string) $project['name'],
                 'workspacePath' => (string) $project['workspace_path'],
+                'repoUrl' => (string) ($project['repo_url'] ?? ''),
+                'defaultBranch' => (string) ($project['default_branch'] ?? ''),
             ],
             'task' => $task,
         ];

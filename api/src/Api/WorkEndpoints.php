@@ -71,6 +71,7 @@ final readonly class WorkEndpoints
             $this->company($route),
             trim((string) ($body['name'] ?? '')),
             trim((string) ($body['workspacePath'] ?? '')),
+            trim((string) ($body['repoUrl'] ?? '')),
         ));
     }
 

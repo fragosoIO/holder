@@ -1,0 +1,7 @@
+#!/bin/sh
+if [ "${HOLDER_FAKE_GH_MISSING:-}" = "1" ]; then
+  echo "gh: command not found" >&2
+  exit 127
+fi
+echo "gh version 2.fake"
+exit 0

@@ -10,6 +10,7 @@ import AgentNewView from './views/AgentNewView.vue'
 import AgentView from './views/AgentView.vue'
 import OrgView from './views/OrgView.vue'
 import SettingsView from './views/SettingsView.vue'
+import ProjectsView from './views/ProjectsView.vue'
 import EmptyView from './views/EmptyView.vue'
 import LoginView from './views/LoginView.vue'
 import OnboardingView from './views/OnboardingView.vue'
@@ -27,7 +28,7 @@ export const router = createRouter({
     { path: '/issues/:id', component: TaskView, meta: { title: 'Tasks', section: '/issues' } },
     { path: '/tasks', redirect: '/issues' },
     { path: '/tasks/:id', redirect: (to) => `/issues/${to.params.id}` },
-    { path: '/projects', component: EmptyView, props: { message: 'No projects yet.' }, meta: { title: 'Projects' } },
+    { path: '/projects', component: ProjectsView, meta: { title: 'Projects' } },
     { path: '/routines', component: EmptyView, props: { message: 'No routines yet.' }, meta: { title: 'Routines' } },
     { path: '/artifacts', component: EmptyView, props: { message: 'No artifacts yet.' }, meta: { title: 'Artifacts' } },
     { path: '/goals', component: GoalsView, meta: { title: 'Goals' } },

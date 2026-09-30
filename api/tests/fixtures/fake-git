@@ -1,0 +1,96 @@
+#!/bin/sh
+log="${HOLDER_FAKE_GIT_LOG:-/tmp/holder-fake-git.log}"
+failfile="${HOLDER_FAKE_GIT_FAIL:-/tmp/holder-fake-git.fail}"
+printf '%s\n' "$*" >> "$log"
+mode=""
+if [ -f "$failfile" ]; then
+  mode=$(cat "$failfile")
+fi
+if [ "${1:-}" = "-C" ]; then
+  shift 2
+fi
+cmd="${1:-}"
+if [ "$cmd" = "--version" ]; then
+  echo "git version 2.fake"
+  exit 0
+fi
+if [ "$cmd" = "clone" ]; then
+  if [ "$mode" = "clone" ]; then
+    echo "fatal: repository not found" >&2
+    if [ -n "${GH_TOKEN:-}" ]; then
+      echo "token ${GH_TOKEN}" >&2
+    fi
+    exit 1
+  fi
+  for dest do :; done
+  mkdir -p "$dest"
+  exit 0
+fi
+if [ "$cmd" = "symbolic-ref" ]; then
+  echo "origin/main"
+  exit 0
+fi
+if [ "$cmd" = "fetch" ]; then
+  if [ "$mode" = "fetch" ]; then
+    echo "fatal: fetch failed" >&2
+    exit 1
+  fi
+  exit 0
+fi
+if [ "$cmd" = "rev-parse" ]; then
+  for ref do :; done
+  if [ "$mode" = "local" ] && printf '%s' "$ref" | grep -q "refs/heads/"; then
+    exit 0
+  fi
+  if [ "$mode" = "remote" ] && printf '%s' "$ref" | grep -q "refs/remotes/"; then
+    exit 0
+  fi
+  exit 1
+fi
+if [ "$cmd" = "worktree" ]; then
+  sub="${2:-}"
+  if [ "$sub" = "list" ]; then
+    case "$mode" in
+      *list*)
+        echo "fatal: worktree list failed" >&2
+        exit 1
+        ;;
+    esac
+    grep "worktree add" "$log" | while IFS= read -r line; do
+      path=""
+      for word in $line; do
+        case "$word" in
+          /*) path=$word ;;
+        esac
+      done
+      if [ -n "$path" ]; then
+        printf 'worktree %s\n' "$path"
+      fi
+    done
+    exit 0
+  fi
+  if [ "$sub" = "add" ]; then
+    path="."
+    for arg do
+      case "$arg" in
+        /*) path=$arg ;;
+      esac
+    done
+    mkdir -p "$path"
+    exit 0
+  fi
+  if [ "$sub" = "remove" ]; then
+    if [ "$mode" = "remove" ]; then
+      echo "fatal: worktree remove failed" >&2
+      exit 1
+    fi
+    for dest do :; done
+    rm -rf "$dest"
+    exit 0
+  fi
+fi
+if [ "$cmd" = "branch" ]; then
+  exit 0
+fi
+echo "unexpected git command: $*" >&2
+exit 1

@@ -13,6 +13,7 @@ final class PromptBuilder
      * @param list<array<string, mixed>> $comments
      * @param array<string, mixed> $agent
      * @param list<array<string, mixed>> $reports
+     * @param array{repoUrl: string, branch: string, defaultBranch: string, reviewBranches: list<string>}|null $repository
      */
     public function build(
         array $company,
@@ -23,6 +24,7 @@ final class PromptBuilder
         ?int $budgetRemainingCents,
         string $wakeReason = '',
         array $reports = [],
+        ?array $repository = null,
     ): string {
         $lines = [];
         $lines[] = sprintf(
@@ -111,6 +113,33 @@ final class PromptBuilder
         $lines[] = $reports === []
             ? 'HOLDER_RUN_TOKEN and HOLDER_API_URL are already set. Do the task in this workspace.'
             : 'HOLDER_RUN_TOKEN and HOLDER_API_URL are already set. If you keep this task, do it in this workspace. If you assign it, stop.';
+
+        if (is_array($repository)) {
+            if ($wakeReason === 'review') {
+                $lines[] = 'Finished subtask branches:';
+                $reviewBranches = $repository['reviewBranches'] ?? [];
+                if (is_array($reviewBranches)) {
+                    foreach ($reviewBranches as $reviewBranch) {
+                        $lines[] = '- ' . (string) $reviewBranch;
+                    }
+                }
+                $lines[] = 'Read the pull request URL in the comments. Do not open a new pull request.';
+                $lines[] = 'Do not print GH_TOKEN or GITHUB_TOKEN.';
+            } else {
+                $repoUrl = (string) $repository['repoUrl'];
+                $branch = (string) $repository['branch'];
+                $defaultBranch = (string) $repository['defaultBranch'];
+                $title = (string) $task['title'];
+                $lines[] = 'Repository: ' . $repoUrl;
+                $lines[] = 'You are on branch ' . $branch . ', branched from ' . $defaultBranch . '.';
+                $lines[] = 'Commit your work on this branch. Push it with: git push -u origin ' . $branch;
+                $lines[] = 'Open a pull request with gh pr create. Use ' . $defaultBranch . ' as the base, ' . $branch . ' as the head, and ' . $title . ' as the pull request title. Write the body from the work you did.';
+                $lines[] = 'Put the pull request URL in a holder comment.';
+                $lines[] = 'Do not push ' . $defaultBranch . '. Do not force-push.';
+                $lines[] = 'If gh pr view already shows a pull request for this branch, push new commits and leave that pull request in place.';
+                $lines[] = 'Do not print GH_TOKEN or GITHUB_TOKEN.';
+            }
+        }
 
         return implode("\n", $lines);
     }

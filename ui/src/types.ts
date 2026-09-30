@@ -1,5 +1,20 @@
 export type User = { id: string; name: string; email: string }
-export type Company = { id: string; name: string; mission: string; role: string; workspacePath: string }
+export type Company = {
+  id: string
+  name: string
+  mission: string
+  role: string
+  workspacePath: string
+  githubConnected: boolean
+}
+export type Project = {
+  id: string
+  companyId: string
+  name: string
+  workspacePath: string
+  repoUrl: string
+  defaultBranch: string
+}
 export type PiModel = {
   provider: string
   id: string

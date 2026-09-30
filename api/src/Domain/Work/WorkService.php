@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Domain\Work;
 
+use App\Domain\Github\GithubUrl;
+use App\Domain\Github\RepoCheckout;
+use App\Domain\Github\TokenCipher;
 use App\Domain\HolderException;
 use App\Domain\Identity\IdentityService;
 use App\Domain\Ids;
@@ -20,6 +23,8 @@ final class WorkService
         private readonly Db $db,
         private readonly IdentityService $identity,
         private readonly OrgService $org,
+        private readonly RepoCheckout $checkout,
+        private readonly TokenCipher $cipher,
     ) {
         $this->agentQuestions = new AgentQuestions();
     }
@@ -92,31 +97,95 @@ final class WorkService
             'companyId' => (string) $row['company_id'],
             'name' => (string) $row['name'],
             'workspacePath' => (string) $row['workspace_path'],
+            'repoUrl' => (string) ($row['repo_url'] ?? ''),
+            'defaultBranch' => (string) ($row['default_branch'] ?? ''),
         ], $rows);
     }
 
     /**
      * @return array<string, mixed>
      */
-    public function createProject(string $userId, string $companyId, string $name, string $workspacePath): array
-    {
+    public function createProject(
+        string $userId,
+        string $companyId,
+        string $name,
+        string $workspacePath,
+        string $repoUrl = '',
+    ): array {
         $membership = $this->identity->requireMembership($userId, $companyId);
         $this->identity->assertCanWrite((string) $membership['role']);
         if ($name === '') {
             throw new HolderException('missing_field', 'Name is required.', 422);
         }
         $id = Ids::uuid();
-        $this->db->exec(
-            'INSERT INTO projects (id, company_id, name, workspace_path) VALUES (:id, :company_id, :name, :workspace_path)',
-            ['id' => $id, 'company_id' => $companyId, 'name' => $name, 'workspace_path' => $workspacePath],
-        );
+        $repoUrl = trim($repoUrl);
+        $storedRepo = '';
+        $branch = '';
+        if ($repoUrl !== '') {
+            $storedRepo = GithubUrl::canonicalize($repoUrl);
+            $company = $this->db->one(
+                'SELECT github_token FROM companies WHERE id = :id',
+                ['id' => $companyId],
+            );
+            $stored = $company === null ? null : ($company['github_token'] ?? null);
+            if (!is_string($stored) || $stored === '') {
+                throw new HolderException('github_token_missing', 'github_token_missing', 422);
+            }
+            // The opened token is in this frame until the insert finishes.
+            $ignoreArgs = ini_get('zend.exception_ignore_args');
+            ini_set('zend.exception_ignore_args', '1');
+            $cloned = false;
+            try {
+                $branch = $this->checkout->cloneRepository($id, $storedRepo, $this->cipher->open($stored));
+                $cloned = true;
+                $workspacePath = $this->checkout->directory($id);
+                $this->insertProject($id, $companyId, $name, $workspacePath, $storedRepo, $branch);
+            } catch (\Throwable $error) {
+                if ($cloned) {
+                    try {
+                        $this->checkout->deleteRepository($id);
+                    } catch (\Throwable) {
+                        // A failed delete must not hide the insert error.
+                    }
+                }
+                throw $error;
+            } finally {
+                ini_set('zend.exception_ignore_args', $ignoreArgs === false ? '0' : $ignoreArgs);
+            }
+        } else {
+            $this->insertProject($id, $companyId, $name, $workspacePath, $storedRepo, $branch);
+        }
 
         return [
             'id' => $id,
             'companyId' => $companyId,
             'name' => $name,
             'workspacePath' => $workspacePath,
+            'repoUrl' => $storedRepo,
+            'defaultBranch' => $branch,
         ];
+    }
+
+    private function insertProject(
+        string $id,
+        string $companyId,
+        string $name,
+        string $workspacePath,
+        string $repoUrl,
+        string $branch,
+    ): void {
+        $this->db->exec(
+            'INSERT INTO projects (id, company_id, name, workspace_path, repo_url, default_branch)
+             VALUES (:id, :company_id, :name, :workspace_path, :repo_url, :default_branch)',
+            [
+                'id' => $id,
+                'company_id' => $companyId,
+                'name' => $name,
+                'workspace_path' => $workspacePath,
+                'repo_url' => $repoUrl,
+                'default_branch' => $branch,
+            ],
+        );
     }
 
     /**
@@ -276,6 +345,8 @@ final class WorkService
             $this->wakeAssignee($companyId, $taskId, $previousAssignee, $previousStatus, $status);
         });
 
+        $this->releaseWorktree($companyId, $taskId, $previousStatus, $status);
+
         return $this->getTask($userId, $companyId, $taskId);
     }
 
@@ -432,6 +503,8 @@ final class WorkService
             $this->settleBlockers($companyId, $taskId, $previousStatus, $status);
             $this->wakeAssignee($companyId, $taskId, $previousAssignee, $previousStatus, $status);
         });
+
+        $this->releaseWorktree($companyId, $taskId, $previousStatus, $status);
 
         return $this->taskResource($this->requireTaskRow($companyId, $taskId), true);
     }
@@ -973,6 +1046,29 @@ final class WorkService
         }
         if ($previousStatus === 'blocked') {
             $this->enqueue($companyId, $assignee, $taskId, 'unblocked');
+        }
+    }
+
+    private function releaseWorktree(string $companyId, string $taskId, string $previous, string $status): void
+    {
+        if (($status !== 'done' && $status !== 'cancelled') || $previous === $status) {
+            return;
+        }
+        $task = $this->requireTaskRow($companyId, $taskId);
+        if ($task['project_id'] === null) {
+            return;
+        }
+        $project = $this->db->one(
+            'SELECT repo_url FROM projects WHERE id = :id AND company_id = :company_id',
+            ['id' => $task['project_id'], 'company_id' => $companyId],
+        );
+        if ($project === null || (string) $project['repo_url'] === '') {
+            return;
+        }
+        try {
+            $this->checkout->remove((string) $task['project_id'], $taskId);
+        } catch (\Throwable) {
+            // The status is already committed. Cleanup must not fail the request.
         }
     }
 

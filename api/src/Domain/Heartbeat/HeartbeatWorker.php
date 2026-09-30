@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace App\Domain\Heartbeat;
 
 use App\Domain\CompanyWorkspace;
+use App\Domain\Github\GitClient;
+use App\Domain\Github\RepoCheckout;
+use App\Domain\Github\TokenCipher;
 use App\Domain\HolderConfig;
 use App\Domain\Ids;
 use App\Infrastructure\Db;
@@ -18,6 +21,9 @@ final class HeartbeatWorker
         private readonly HolderConfig $config,
         private readonly PiRpcClient $pi,
         private readonly CompanyWorkspace $workspaces,
+        private readonly RepoCheckout $checkout,
+        private readonly TokenCipher $cipher,
+        private readonly GitClient $git,
     ) {}
 
     public function run(bool $once): int
@@ -115,7 +121,8 @@ final class HeartbeatWorker
         if ($company === null) {
             return;
         }
-        $workspace = $this->workspaces->ensure((string) $company['id']);
+        $companyId = (string) $company['id'];
+        $workspace = $this->workspaces->ensure($companyId);
         $comments = $this->db->all(
             'SELECT * FROM task_comments WHERE task_id = :task_id ORDER BY created_at',
             ['task_id' => $task['id']],
@@ -139,15 +146,36 @@ final class HeartbeatWorker
                 'status' => 'active',
             ],
         );
+        /** @var array{repoUrl: string, branch: string, defaultBranch: string, reviewBranches: list<string>}|null $repository */
+        $repository = null;
+        $project = null;
+        if ($task['project_id'] !== null) {
+            $project = $this->db->one(
+                'SELECT * FROM projects WHERE id = :id AND company_id = :company_id',
+                ['id' => $task['project_id'], 'company_id' => $companyId],
+            );
+            if ($project !== null && (string) $project['repo_url'] !== '') {
+                $repository = [
+                    'repoUrl' => (string) $project['repo_url'],
+                    'branch' => 'holder/' . $task['id'],
+                    'defaultBranch' => (string) $project['default_branch'],
+                    'reviewBranches' => $this->reviewBranches($companyId, (string) $task['id'], (string) $wakeup['reason']),
+                ];
+            }
+        }
+        $goalChain = $this->goalChain($task['goal_id'] !== null ? (string) $task['goal_id'] : null);
+        $budgetRemaining = $budget === null ? null : (int) $budget - (int) $agent['spent_cents'];
+        $wakeReason = (string) $wakeup['reason'];
         $prompt = $this->prompts->build(
             $company,
-            $this->goalChain($task['goal_id'] !== null ? (string) $task['goal_id'] : null),
+            $goalChain,
             $task,
             $comments,
             $agent,
-            $budget === null ? null : (int) $budget - (int) $agent['spent_cents'],
-            (string) $wakeup['reason'],
+            $budgetRemaining,
+            $wakeReason,
             $reports,
+            $repository,
         );
 
         $runId = Ids::uuid();
@@ -205,11 +233,56 @@ final class HeartbeatWorker
             $args[] = (string) $agent['pi_thinking'];
         }
 
-        $env = $this->childEnv($token, (string) $task['id']);
+        $githubToken = null;
+        try {
+            if ($repository !== null && $project !== null) {
+                $stored = $company['github_token'] ?? null;
+                $githubToken = $this->openGithubToken(is_string($stored) ? $stored : '');
+                $prepared = $this->checkout->prepare(
+                    (string) $project['id'],
+                    (string) $task['id'],
+                    (string) $project['repo_url'],
+                    (string) $project['default_branch'],
+                    $githubToken,
+                );
+                $workspace = $prepared['worktree'];
+                if ($prepared['defaultBranch'] !== (string) $project['default_branch']) {
+                    $repository['defaultBranch'] = $prepared['defaultBranch'];
+                    $prompt = $this->prompts->build(
+                        $company,
+                        $goalChain,
+                        $task,
+                        $comments,
+                        $agent,
+                        $budgetRemaining,
+                        $wakeReason,
+                        $reports,
+                        $repository,
+                    );
+                    $this->db->exec(
+                        'UPDATE projects SET default_branch = :default_branch WHERE id = :id',
+                        ['default_branch' => $prepared['defaultBranch'], 'id' => $project['id']],
+                    );
+                    $this->db->exec(
+                        'UPDATE runs SET prompt = :prompt WHERE id = :id',
+                        ['prompt' => $prompt, 'id' => $runId],
+                    );
+                }
+                $this->git->assertGh();
+            }
+        } catch (\Throwable $error) {
+            $this->record($runId, $companyId, 'holder.error', [
+                'message' => (new PiRunOutcome())->summarize($error->getMessage()),
+            ]);
+            $this->finishRun($runId, 'failed', null);
+
+            return;
+        }
+
+        $env = $this->childEnv($token, (string) $task['id'], $githubToken);
         $sessionId = null;
         $status = 'failed';
         $failure = null;
-        $companyId = (string) $wakeup['company_id'];
         try {
             $this->pi->start((string) $agent['pi_binary'], $args, $workspace, $env);
             $this->db->exec('UPDATE runs SET pi_pid = :pid WHERE id = :id', ['pid' => $this->pi->pid(), 'id' => $runId]);
@@ -381,9 +454,45 @@ final class HeartbeatWorker
     }
 
     /**
+     * @return list<string>
+     */
+    private function reviewBranches(string $companyId, string $taskId, string $reason): array
+    {
+        if ($reason !== 'review') {
+            return [];
+        }
+
+        $rows = $this->db->all(
+            'SELECT id FROM tasks
+             WHERE company_id = :company_id AND parent_id = :parent_id AND status = :status
+             ORDER BY created_at',
+            [
+                'company_id' => $companyId,
+                'parent_id' => $taskId,
+                'status' => 'done',
+            ],
+        );
+        $branches = [];
+        foreach ($rows as $row) {
+            $branches[] = 'holder/' . $row['id'];
+        }
+
+        return $branches;
+    }
+
+    private function openGithubToken(string $stored): string
+    {
+        if ($stored === '') {
+            return '';
+        }
+
+        return $this->cipher->open($stored);
+    }
+
+    /**
      * @return array<string, string>
      */
-    private function childEnv(string $token, string $taskId): array
+    private function childEnv(string $token, string $taskId, ?string $githubToken): array
     {
         $env = getenv();
         if (!is_array($env)) {
@@ -394,6 +503,13 @@ final class HeartbeatWorker
             if (is_string($key) && is_string($value)) {
                 $stringEnv[$key] = $value;
             }
+        }
+        unset($stringEnv['GH_TOKEN'], $stringEnv['GITHUB_TOKEN'], $stringEnv['GIT_ASKPASS']);
+        if (is_string($githubToken) && $githubToken !== '') {
+            $stringEnv['GH_TOKEN'] = $githubToken;
+            $stringEnv['GITHUB_TOKEN'] = $githubToken;
+            $stringEnv['GIT_ASKPASS'] = dirname($this->config->binPath) . '/holder-git-askpass';
+            $stringEnv['GIT_TERMINAL_PROMPT'] = '0';
         }
         $binDir = dirname($this->config->binPath);
         $path = $stringEnv['PATH'] ?? '';

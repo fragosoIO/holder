@@ -6,6 +6,7 @@ namespace App\Api;
 
 use App\Api\Shared\ResponseFactory;
 use App\Domain\ActorContext;
+use App\Domain\HolderException;
 use App\Domain\Identity\IdentityService;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -58,6 +59,21 @@ final readonly class CompanyEndpoints
             (string) $route->getArgument('companyId'),
             trim((string) ($body['name'] ?? '')),
             trim((string) ($body['mission'] ?? '')),
+        ));
+    }
+
+    public function saveGithubToken(ServerRequestInterface $request, CurrentRoute $route): ResponseInterface
+    {
+        $actor = $this->actors->requireUser();
+        $body = $this->body($request);
+        if (!array_key_exists('token', $body)) {
+            throw new HolderException('missing_field', 'Token is required.', 422);
+        }
+
+        return $this->responses->success($this->identity->setGithubToken(
+            $actor->id,
+            (string) $route->getArgument('companyId'),
+            (string) $body['token'],
         ));
     }
 
