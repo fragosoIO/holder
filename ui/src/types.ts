@@ -101,3 +101,14 @@ export type Run = {
   prompt: string
   events: { id: number; type: string; payload: Record<string, unknown> }[]
 }
+export type FloorTask = { id: string; title: string; status: string }
+export type FloorAgent = {
+  id: string
+  name: string
+  title: string
+  status: string
+  place: 'desk' | 'work'
+  step: string
+  task: FloorTask | null
+}
+export type FloorSnapshot = { agents: FloorAgent[] }
