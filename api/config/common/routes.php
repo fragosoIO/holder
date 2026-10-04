@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Api;
 use App\Api\AgentEndpoints;
 use App\Api\CompanyEndpoints;
+use App\Api\FloorEndpoints;
 use App\Api\HealthAction;
 use App\Api\OnboardingEndpoints;
 use App\Api\SessionEndpoints;
@@ -40,6 +41,7 @@ return [
             Route::post('/companies/{companyId}/agents/{agentId}/pause')->action([AgentEndpoints::class, 'pause'])->name('agents/pause'),
             Route::post('/companies/{companyId}/agents/{agentId}/resume')->action([AgentEndpoints::class, 'resume'])->name('agents/resume'),
             Route::post('/companies/{companyId}/agents/{agentId}/terminate')->action([AgentEndpoints::class, 'terminate'])->name('agents/terminate'),
+            Route::get('/companies/{companyId}/floor')->action([FloorEndpoints::class, 'show'])->name('floor/show'),
 
             Route::get('/companies/{companyId}/goals')->action([WorkEndpoints::class, 'listGoals'])->name('goals/list'),
             Route::post('/companies/{companyId}/goals')->action([WorkEndpoints::class, 'createGoal'])->name('goals/create'),
