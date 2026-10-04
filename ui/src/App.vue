@@ -12,6 +12,7 @@ import {
   History,
   Inbox,
   LayoutDashboard,
+  Map,
   Menu,
   Moon,
   Network,
@@ -52,8 +53,15 @@ const theme = ref(document.documentElement.classList.contains('dark') ? 'dark' :
 const primary: NavItem[] = [
   { to: '/search', label: 'Search', icon: Search },
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/floor', label: 'Floor', icon: Map },
   { to: '/inbox', label: 'Inbox', icon: Inbox },
 ]
+const mobile = computed(() =>
+  ['/dashboard', '/inbox', '/issues', '/agents'].flatMap((to) => {
+    const item = [...primary, ...work, ...organization].find((entry) => entry.to === to)
+    return item ? [item] : []
+  }),
+)
 const work: NavItem[] = [
   { to: '/issues', label: 'Tasks', icon: CircleCheck },
   { to: '/projects', label: 'Projects', icon: FolderOpen },
@@ -284,7 +292,7 @@ async function signOut() {
         <RouterView v-else />
       </main>
       <nav class="fixed inset-x-0 bottom-0 z-30 flex border-t border-border bg-background md:hidden" aria-label="Mobile">
-        <RouterLink v-for="item in [primary[1], primary[2], work[0], organization[0]]" :key="item.to" :to="item.to" class="flex flex-1 flex-col items-center gap-1 py-2 text-[10px] no-underline" :class="current(item.to) ? 'text-foreground' : 'text-muted-foreground'">
+        <RouterLink v-for="item in mobile" :key="item.to" :to="item.to" class="flex flex-1 flex-col items-center gap-1 py-2 text-[10px] no-underline" :class="current(item.to) ? 'text-foreground' : 'text-muted-foreground'">
           <component :is="item.icon" class="h-4 w-4" />
           {{ item.label }}
         </RouterLink>

@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import DashboardView from './views/DashboardView.vue'
+import FloorView from './views/FloorView.vue'
 import InboxView from './views/InboxView.vue'
 import SearchView from './views/SearchView.vue'
 import IssuesView from './views/IssuesView.vue'
@@ -22,6 +23,7 @@ export const router = createRouter({
     { path: '/onboarding', component: OnboardingView, meta: { title: 'New organization' } },
     { path: '/', redirect: '/dashboard' },
     { path: '/dashboard', component: DashboardView, meta: { title: 'Dashboard' } },
+    { path: '/floor', component: FloorView, meta: { title: 'Floor' } },
     { path: '/inbox', component: InboxView, meta: { title: 'Inbox' } },
     { path: '/search', component: SearchView, meta: { title: 'Search' } },
     { path: '/issues', component: IssuesView, meta: { title: 'Tasks' } },
