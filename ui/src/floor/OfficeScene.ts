@@ -16,6 +16,22 @@ let handlers: Handlers = {
   hover: () => {},
 }
 
+type ArrowDir = 'left' | 'right' | 'up' | 'down'
+
+function arrowDir(key: string): ArrowDir | null {
+  if (key === 'ArrowLeft') return 'left'
+  if (key === 'ArrowRight') return 'right'
+  if (key === 'ArrowUp') return 'up'
+  if (key === 'ArrowDown') return 'down'
+  return null
+}
+
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return true
+  return target.isContentEditable
+}
+
 export function setFloorHandlers(next: Handlers): void {
   handlers = next
 }
@@ -37,7 +53,7 @@ function isSnapshot(value: unknown): value is FloorSnapshot {
 export class OfficeScene extends Phaser.Scene {
   private actors = new Map<string, Actor>()
   private spots = new Map<string, { x: number; y: number }>()
-  private cursors: Phaser.Types.Input.Keyboard.CursorKeys | null = null
+  private arrows: Record<ArrowDir, boolean> = { left: false, right: false, up: false, down: false }
   private drag: { x: number; y: number; scrollX: number; scrollY: number } | null = null
   private moved = false
   private mapWidth = 0
@@ -68,7 +84,9 @@ export class OfficeScene extends Phaser.Scene {
     camera.setZoom(1)
     camera.centerOn(this.mapWidth / 2, this.mapHeight / 2)
     camera.setBounds(0, 0, this.mapWidth, this.mapHeight)
-    this.cursors = this.input.keyboard?.createCursorKeys() ?? null
+    window.addEventListener('keydown', this.onArrowDown)
+    window.addEventListener('keyup', this.onArrowUp)
+    this.events.once('shutdown', this.releaseKeys)
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       this.drag = { x: pointer.x, y: pointer.y, scrollX: camera.scrollX, scrollY: camera.scrollY }
       this.moved = false
@@ -136,12 +154,12 @@ export class OfficeScene extends Phaser.Scene {
 
   update(_time: number, delta: number): void {
     const camera = this.cameras.main
-    if (this.cursors) {
+    if (!isTypingTarget(document.activeElement)) {
       const pan = (400 * delta) / 1000
-      if (this.cursors.left.isDown) camera.scrollX -= pan
-      if (this.cursors.right.isDown) camera.scrollX += pan
-      if (this.cursors.up.isDown) camera.scrollY -= pan
-      if (this.cursors.down.isDown) camera.scrollY += pan
+      if (this.arrows.left) camera.scrollX -= pan
+      if (this.arrows.right) camera.scrollX += pan
+      if (this.arrows.up) camera.scrollY -= pan
+      if (this.arrows.down) camera.scrollY += pan
     }
     for (const actor of this.actors.values()) {
       const dx = actor.targetX - actor.sprite.x
@@ -174,6 +192,29 @@ export class OfficeScene extends Phaser.Scene {
       actor.bubble.setDepth(actor.sprite.y + 2)
       actor.label.setDepth(actor.sprite.y + 2)
     }
+  }
+
+  private onArrowDown = (event: KeyboardEvent): void => {
+    const dir = arrowDir(event.key)
+    if (!dir) return
+    if (isTypingTarget(event.target) || isTypingTarget(document.activeElement)) return
+    event.preventDefault()
+    this.arrows[dir] = true
+  }
+
+  private onArrowUp = (event: KeyboardEvent): void => {
+    const dir = arrowDir(event.key)
+    if (!dir) return
+    this.arrows[dir] = false
+  }
+
+  private releaseKeys = (): void => {
+    window.removeEventListener('keydown', this.onArrowDown)
+    window.removeEventListener('keyup', this.onArrowUp)
+    this.arrows.left = false
+    this.arrows.right = false
+    this.arrows.up = false
+    this.arrows.down = false
   }
 
   private point(place: FloorAgent['place'], index: number): { x: number; y: number } {

@@ -68,7 +68,7 @@ onMounted(() => {
       type: Phaser.AUTO,
       parent: host.value,
       width: host.value.clientWidth || 640,
-      height: 448,
+      height: 768,
       pixelArt: true,
       backgroundColor: '#1c1915',
       banner: false,
@@ -113,7 +113,7 @@ watch(() => company.value?.id, () => {
       <RouterLink to="/agents/new" class="text-sm font-medium underline underline-offset-2">Create one here</RouterLink>
     </div>
     <div class="relative">
-      <div ref="host" class="h-[28rem] w-full overflow-hidden rounded-xl border border-border" />
+      <div ref="host" class="h-[48rem] w-full overflow-hidden rounded-xl border border-border" />
       <p v-if="hovered" class="absolute left-2 top-2 z-10 max-w-sm rounded-lg border border-border bg-card px-3 py-2 text-sm shadow">
         <span class="block font-medium">{{ hovered.name }}</span>
         <span class="block text-muted-foreground">{{ hovered.task?.title ?? 'No task' }}</span>
