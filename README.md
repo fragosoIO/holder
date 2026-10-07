@@ -46,16 +46,16 @@ To run the UI on the host, stop the `ui` service and use `npm run dev` in `ui/`.
 
 The first time a company is loaded, Holder creates a workspace under the data directory (`api/runtime/holder-data` unless `HOLDER_DATA_DIR` is set). Agents run there. A GitHub project is checked out under `repos/` inside that directory.
 
-Compose leaves the heartbeat worker stopped. After you assign a task, run one wakeup:
+Compose leaves the heartbeat worker stopped. The worker uses the host network so Pi can reach model servers on localhost, including SSH tunnels. After you assign a task, run one wakeup:
 
 ```bash
-docker compose run --rm --entrypoint php api ./yii heartbeat:work --once
+docker compose --profile worker run --rm worker ./yii heartbeat:work --once
 ```
 
 Leave the worker running:
 
 ```bash
-docker compose run --rm --entrypoint php api ./yii heartbeat:work
+docker compose --profile worker up -d worker
 ```
 
 The worker claims one pending wakeup at a time. It skips a paused agent and a blocked task. Pi receives the company mission, the goal chain, the task, its comments, and the agents who report to the assignee. The task page streams the run.

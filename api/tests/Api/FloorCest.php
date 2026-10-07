@@ -48,19 +48,19 @@ final readonly class FloorCest
         $I->seeResponseCodeIs(HttpCode::NOT_FOUND);
     }
 
-    public function anIdleAgentStandsAtTheDesk(ApiTester $I): void
+    public function anIdleAgentSmokesOnTheBalcony(ApiTester $I): void
     {
         $companyId = $this->company($I);
         $agentId = $this->agent($I, $companyId, 'Ada');
 
         $agent = $this->floorAgent($I, $companyId, $agentId);
         assertNotNull($agent);
-        assertSame('desk', $agent['place']);
-        assertSame('At their desk', $agent['step']);
+        assertSame('balcony', $agent['place']);
+        assertSame('Smoking', $agent['step']);
         assertNull($agent['task']);
     }
 
-    public function anAssignedTaskThatIsNotRunningStaysAtTheDesk(ApiTester $I): void
+    public function anAssignedTaskThatIsNotRunningGoesToTheBalcony(ApiTester $I): void
     {
         $companyId = $this->company($I);
         $agentId = $this->agent($I, $companyId, 'Ada');
@@ -74,8 +74,8 @@ final readonly class FloorCest
 
         $agent = $this->floorAgent($I, $companyId, $agentId);
         assertNotNull($agent);
-        assertSame('desk', $agent['place']);
-        assertSame('At their desk', $agent['step']);
+        assertSame('balcony', $agent['place']);
+        assertSame('Smoking', $agent['step']);
         assertSame($taskId, $agent['task']['id'] ?? null);
         assertSame('Write the health check', $agent['task']['title'] ?? null);
     }

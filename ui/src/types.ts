@@ -107,7 +107,7 @@ export type FloorAgent = {
   name: string
   title: string
   status: string
-  place: 'desk' | 'work'
+  place: 'desk' | 'work' | 'balcony'
   step: string
   task: FloorTask | null
 }

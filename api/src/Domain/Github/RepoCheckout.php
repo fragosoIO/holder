@@ -19,6 +19,11 @@ final class RepoCheckout
         return $this->config->dataDir . '/repos/' . $projectId;
     }
 
+    public function worktreeDirectory(string $taskId): string
+    {
+        return $this->config->dataDir . '/worktrees/' . $taskId;
+    }
+
     public function deleteRepository(string $projectId): void
     {
         $this->delete($this->directory($projectId));
@@ -158,7 +163,7 @@ final class RepoCheckout
 
     private function worktreePath(string $taskId): string
     {
-        return $this->config->dataDir . '/worktrees/' . $taskId;
+        return $this->worktreeDirectory($taskId);
     }
 
     private function listsWorktree(string $stdout, string $worktree): bool

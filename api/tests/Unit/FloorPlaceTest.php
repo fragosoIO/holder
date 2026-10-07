@@ -9,14 +9,14 @@ use Codeception\Test\Unit;
 
 final class FloorPlaceTest extends Unit
 {
-    public function testIdleAgentStaysAtTheDesk(): void
+    public function testIdleAgentSmokesOnTheBalcony(): void
     {
         $this->assertSame(
-            ['place' => 'desk', 'step' => 'At their desk'],
+            ['place' => 'balcony', 'step' => 'Smoking'],
             FloorPlace::decide('active', null, false),
         );
         $this->assertSame(
-            ['place' => 'desk', 'step' => 'At their desk'],
+            ['place' => 'balcony', 'step' => 'Smoking'],
             FloorPlace::decide('active', 'in_progress', false),
         );
     }

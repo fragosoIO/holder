@@ -89,6 +89,9 @@ export function modelFailure(events: RunEvent[]): string {
   for (const event of events) {
     const candidates: unknown[] = []
     if (event.type === 'holder.error' && typeof event.payload.message === 'string') candidates.push(event.payload.message)
+    if (event.type === 'response' && event.payload.success === false && typeof event.payload.error === 'string') {
+      candidates.push(event.payload.error)
+    }
     if (event.payload.message && typeof event.payload.message === 'object') candidates.push(event.payload.message)
     if (Array.isArray(event.payload.messages)) candidates.push(...event.payload.messages)
     for (const candidate of candidates) {

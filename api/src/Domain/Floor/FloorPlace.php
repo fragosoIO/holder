@@ -21,6 +21,6 @@ final class FloorPlace
             return ['place' => 'work', 'step' => null];
         }
 
-        return ['place' => 'desk', 'step' => 'At their desk'];
+        return ['place' => 'balcony', 'step' => 'Smoking'];
     }
 }

@@ -20,13 +20,18 @@ services:
 
   api:
     build: ./docker/php
+    user: "1000:1000"
     working_dir: /repo/api
     volumes:
       - .:/repo
-      - ${HOME}/.pi:/root/.pi
+      # Host Pi login, mounted on the container user's home. Not /root/.pi:
+      # a root process rewrites accounts.json as mode 0600 and the host user
+      # then gets EACCES from `pi`.
+      - ${HOME}/.pi:/home/holder/.pi
     env_file:
       - ./api/.env
     environment:
+      HOME: /home/holder
       HOLDER_DB_HOST: postgres
       HOLDER_API_URL: http://api:8080
     ports:
@@ -44,6 +49,32 @@ services:
       start_period: 10s
     networks:
       - internal
+    restart: unless-stopped
+
+  # Pi's model servers are host loopback addresses (SSH tunnels, local models).
+  # The bridge network cannot reach those, and Docker drops traffic to the bridge IP.
+  # This service shares the host network so localhost in ~/.pi is the machine's localhost.
+  # A profile keeps `docker compose up` from racing the test suite's own worker.
+  worker:
+    profiles: ["worker"]
+    build: ./docker/php
+    network_mode: host
+    user: "1000:1000"
+    working_dir: /repo/api
+    volumes:
+      - .:/repo
+      - ${HOME}/.pi:/home/holder/.pi
+    env_file:
+      - ./api/.env
+    environment:
+      HOME: /home/holder
+      HOLDER_DB_HOST: 127.0.0.1
+      HOLDER_API_URL: http://127.0.0.1:8080
+    entrypoint: ["php"]
+    command: ["./yii", "heartbeat:work"]
+    depends_on:
+      api:
+        condition: service_healthy
     restart: unless-stopped
 
   ui:

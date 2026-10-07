@@ -4,6 +4,7 @@ import { RouterLink, useRoute } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { api, failureMessage } from '../api'
 import AgentCapsule from '../components/AgentCapsule.vue'
+import ProjectPreview from '../components/ProjectPreview.vue'
 import QuestionCard from '../components/QuestionCard.vue'
 import StatusMark from '../components/StatusMark.vue'
 import { useWorkspace } from '../composables/workspace'
@@ -191,7 +192,7 @@ onUnmounted(() => source?.close())
 <template>
   <p v-if="loading" class="text-sm text-muted-foreground" role="status">Loading the task…</p>
   <p v-else-if="error && !task" class="text-sm text-destructive" role="alert">{{ error }}</p>
-  <div v-else-if="task" class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
+  <div v-else-if="task" class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_16rem]">
     <section class="min-w-0 space-y-4">
       <div class="flex items-start gap-2">
         <StatusMark :status="task.status" class="mt-1" />
@@ -268,7 +269,8 @@ onUnmounted(() => source?.close())
         <p v-if="!task.runs?.length" class="text-sm text-muted-foreground">No run yet. Assigning the task queues a heartbeat.</p>
       </section>
     </section>
-    <aside class="card h-fit space-y-3 p-4">
+    <ProjectPreview v-if="company" :company-id="company.id" :task-id="task.id" />
+    <aside class="card h-fit space-y-3 p-4 lg:self-start">
       <label class="label">Status
         <select class="field" :value="task.status" @change="patch({ status: ($event.target as HTMLSelectElement).value })">
           <option v-for="item in taskStatuses" :key="item.value" :value="item.value">{{ item.label }}</option>

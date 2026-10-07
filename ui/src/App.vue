@@ -286,7 +286,11 @@ async function signOut() {
           </template>
         </nav>
       </header>
-      <main id="main-content" class="min-h-0 flex-1 overflow-auto p-4 pb-20 md:p-6 md:pb-6">
+      <main
+        id="main-content"
+        class="min-h-0 flex-1 p-4 pb-20 md:p-6 md:pb-6"
+        :class="route.path === '/floor' ? 'flex flex-col overflow-hidden' : 'overflow-auto'"
+      >
         <p v-if="loadError" class="mb-4 text-sm text-destructive" role="alert">{{ loadError }}</p>
         <p v-else-if="!company" class="text-sm text-muted-foreground">No company yet.</p>
         <RouterView v-else />

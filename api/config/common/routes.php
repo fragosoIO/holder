@@ -8,6 +8,7 @@ use App\Api\CompanyEndpoints;
 use App\Api\FloorEndpoints;
 use App\Api\HealthAction;
 use App\Api\OnboardingEndpoints;
+use App\Api\PreviewEndpoints;
 use App\Api\SessionEndpoints;
 use App\Api\WorkEndpoints;
 use Yiisoft\Router\Group;
@@ -57,6 +58,8 @@ return [
             Route::post('/companies/{companyId}/tasks/{taskId}/question-answer')->action([WorkEndpoints::class, 'answerQuestions'])->name('tasks/question-answer'),
             Route::post('/companies/{companyId}/tasks/{taskId}/cancel')->action([WorkEndpoints::class, 'cancel'])->name('tasks/cancel'),
             Route::get('/companies/{companyId}/tasks/{taskId}/stream')->action([WorkEndpoints::class, 'stream'])->name('tasks/stream'),
+            Route::get('/companies/{companyId}/tasks/{taskId}/preview')->action([PreviewEndpoints::class, 'describe'])->name('tasks/preview'),
+            Route::get('/companies/{companyId}/tasks/{taskId}/preview/{token}/{path:.+}')->action([PreviewEndpoints::class, 'file'])->name('tasks/preview-file'),
 
             Route::post('/agent/tasks/{taskId}/comments')->action([WorkEndpoints::class, 'agentComment'])->name('agent/comment'),
             Route::post('/agent/tasks/{taskId}/questions')->action([WorkEndpoints::class, 'askQuestions'])->name('agent/questions'),

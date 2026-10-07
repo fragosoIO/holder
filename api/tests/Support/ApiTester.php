@@ -24,6 +24,17 @@ class ApiTester extends \Codeception\Actor
     use _generated\ApiTesterActions;
 
     /**
-     * Define custom actions here
+     * The generated actions do not expose PhpBrowser's cookie jar.
      */
+    public function resetCookie(string $name): void
+    {
+        $metadata = new \ReflectionProperty(\Codeception\Scenario::class, 'metadata');
+        /** @var \Codeception\Test\Metadata $meta */
+        $meta = $metadata->getValue($this->getScenario());
+        /** @var \Codeception\Lib\ModuleContainer $modules */
+        $modules = $meta->getService('modules');
+        /** @var \Codeception\Module\PhpBrowser $browser */
+        $browser = $modules->getModule('PhpBrowser');
+        $browser->resetCookie($name);
+    }
 }
